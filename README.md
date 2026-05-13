@@ -83,6 +83,9 @@ Internal access only. Colour-coded zone status (green / amber / red), real-time 
 
 Pure Bluetooth Mesh across all 20 nodes. No WiFi on the node side. Romeo and Julia are treated as one continuous mesh. The Pi connects to the mesh via a USB BLE adapter and acts as the gateway node.
 
+<img width="1800" height="2200" alt="PhytoSense_DataFlow" src="https://github.com/user-attachments/assets/a96b23a2-995c-4070-9e9b-b547ce5ebde6" />
+
+
 ---
 
 ## Future scope
