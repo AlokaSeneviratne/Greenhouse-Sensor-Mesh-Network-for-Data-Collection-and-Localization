@@ -1,0 +1,13 @@
+idf_component_register(
+    SRCS
+        "main.c"
+        "gradient_mesh.c"
+        "sensors.c"
+    INCLUDE_DIRS
+        "."
+    REQUIRES
+        bt
+        nvs_flash
+        driver
+        esp_adc_cal
+)
