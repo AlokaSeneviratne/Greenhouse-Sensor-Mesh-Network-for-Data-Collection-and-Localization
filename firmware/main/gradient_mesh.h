@@ -24,7 +24,7 @@ typedef struct __attribute__((packed)) {
     float    temperature_c;
     float    humidity_pct;
     float    soil_moisture_pct;
-} sensor_data_msg_t;   /* 23 bytes */
+} sensor_data_msg_t;   /* 19 bytes: 3×uint8 + uint32 + 3×float, packed, no padding */
 
 /* Periodic advertisement: node announces its gradient so neighbours can build
    their routing table without provisioner involvement */

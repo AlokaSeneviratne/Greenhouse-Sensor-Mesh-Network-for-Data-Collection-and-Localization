@@ -1,53 +1,43 @@
 #!/usr/bin/env python3
 """
-PhytoSense Hub Gateway
+PhytoSense Hub Gateway – Qt live dashboard
 
-Reads newline-delimited JSON records from the hub ESP32 over USB serial and
-writes them to InfluxDB.  The hub ESP32 (NODE_ID=0, GRADIENT_LEVEL=0) is the
-BLE Mesh member that receives every sensor_data_msg_t forwarded to gradient 0
-and prints it as JSON via UART.
-
-Expected JSON line format (one per sensor reading received):
-  {"node":N,"t":T,"h":H,"s":S,"hops":N,"ts":N}
+Reads newline-delimited JSON from the hub ESP32 over USB serial and displays
+a real-time staff dashboard.  No cloud, no InfluxDB required.
 
 Run on Raspberry Pi:
-  pip install -r requirements.txt
-  python3 gateway.py
+    pip install -r requirements.txt
+    python3 gateway.py
 """
 
 import json
-import logging
+import sys
 import time
-from datetime import datetime, timezone
+from datetime import datetime
 
 import serial
-from influxdb_client import InfluxDBClient, Point, WritePrecision
-from influxdb_client.client.write_api import SYNCHRONOUS
-
-LOG = logging.getLogger("gateway")
-logging.basicConfig(
-    level=logging.INFO,
-    format="%(asctime)s %(levelname)s %(message)s",
+from PySide6.QtCore import QThread, Signal, QTimer
+from PySide6.QtGui import QFont, QColor, QPalette
+from PySide6.QtWidgets import (
+    QApplication, QFrame, QGroupBox,
+    QHBoxLayout, QLabel, QMainWindow, QSizePolicy,
+    QStatusBar, QVBoxLayout, QWidget,
 )
 
 # ---- Site configuration ----
-SERIAL_PORT   = "/dev/ttyUSB0"
-SERIAL_BAUD   = 115200
+SERIAL_PORT = "/dev/ttyUSB0"
+SERIAL_BAUD = 115200
 
-INFLUX_URL    = "http://localhost:8086"
-INFLUX_TOKEN  = "your-influxdb-token"     # replace with actual token
-INFLUX_ORG    = "phytosense"
-INFLUX_BUCKET = "greenhouse"
-
-# Node → greenhouse mapping (mirrors topology.h)
-GREENHOUSE = {
-    **{i: "romeo" for i in range(1, 13)},   # nodes  1-12 → Romeo
-    **{i: "julia" for i in range(13, 21)},  # nodes 13-20 → Julia
+THRESHOLDS = {
+    "t": {"min": 10.0, "max": 35.0,  "label": "Temp °C"},
+    "h": {"min": 40.0, "max": 95.0,  "label": "Humidity %"},
+    "s": {"min": 20.0, "max": 100.0, "label": "Soil %"},
 }
 
-# Node → gradient level (mirrors topology.h)
-GRADIENT = {
-     0: 0,
+# Romeo nodes 1–12, Julia 13–20  (mirrors topology.h)
+GREENHOUSE = {**{i: "Romeo" for i in range(1, 13)},
+              **{i: "Julia" for i in range(13, 21)}}
+GRADIENT   = {
      1: 1,  2: 1,
      3: 2,  4: 2,  5: 2,  6: 2,
      7: 3,  8: 3,  9: 3, 10: 3,
@@ -57,108 +47,271 @@ GRADIENT = {
     18: 3, 19: 3, 20: 3,
 }
 
-# Sensor alert thresholds (greenhouse staff can adjust these)
-THRESHOLDS = {
-    "temperature_c":    {"min": 10.0, "max": 35.0},
-    "humidity_pct":     {"min": 40.0, "max": 95.0},
-    "soil_moisture_pct": {"min": 20.0, "max": 100.0},
-}
+# Gradient rings per greenhouse (for column layout)
+ROMEO_RINGS = {1: [1, 2], 2: [3, 4, 5, 6], 3: [7, 8, 9, 10], 4: [11, 12]}
+JULIA_RINGS = {1: [13, 14], 2: [15, 16, 17], 3: [18, 19, 20]}
+
+CARD_GREEN  = "#1e4620"
+CARD_AMBER  = "#7a4a00"
+CARD_RED    = "#7a1a1a"
+CARD_IDLE   = "#2a2a2a"
+TEXT_COLOUR = "#e8e8e8"
+BG_COLOUR   = "#121212"
 
 
-def check_alerts(node_id: int, reading: dict) -> None:
-    for field, bounds in THRESHOLDS.items():
-        val = reading.get(field)
-        if val is None:
-            continue
-        if val < bounds["min"] or val > bounds["max"]:
-            LOG.warning("ALERT node %d  %s=%.1f  (bounds %.1f–%.1f)",
-                        node_id, field, val, bounds["min"], bounds["max"])
+# ---------------------------------------------------------------------------
+# Serial reader thread
+# ---------------------------------------------------------------------------
 
+class SerialReader(QThread):
+    record_received = Signal(dict)   # emitted for each valid JSON line
+    status_changed  = Signal(str)    # emitted on connect / disconnect
 
-def write_to_influx(write_api, record: dict) -> None:
-    node_id    = record["node"]
-    greenhouse = GREENHOUSE.get(node_id, "unknown")
-    gradient   = GRADIENT.get(node_id, -1)
+    def __init__(self, port: str, baud: int, parent=None):
+        super().__init__(parent)
+        self._port = port
+        self._baud = baud
+        self._running = True
 
-    point = (
-        Point("sensor_reading")
-        .tag("node_id",    str(node_id))
-        .tag("greenhouse", greenhouse)
-        .tag("gradient",   str(gradient))
-        .field("temperature_c",     record["t"])
-        .field("humidity_pct",      record["h"])
-        .field("soil_moisture_pct", record["s"])
-        .field("hop_count",         record.get("hops", 0))
-        .time(datetime.now(timezone.utc), WritePrecision.SECONDS)
-    )
-
-    write_api.write(bucket=INFLUX_BUCKET, org=INFLUX_ORG, record=point)
-
-    LOG.info("Node %2d (%s g%d) | T=%5.1f°C  H=%5.1f%%  S=%5.1f%%  hops=%d",
-             node_id, greenhouse, gradient,
-             record["t"], record["h"], record["s"],
-             record.get("hops", 0))
-
-    check_alerts(node_id, {
-        "temperature_c":     record["t"],
-        "humidity_pct":      record["h"],
-        "soil_moisture_pct": record["s"],
-    })
-
-
-def open_serial() -> serial.Serial:
-    while True:
-        try:
-            ser = serial.Serial(SERIAL_PORT, SERIAL_BAUD, timeout=2)
-            LOG.info("Serial open: %s @ %d", SERIAL_PORT, SERIAL_BAUD)
-            return ser
-        except serial.SerialException as e:
-            LOG.error("Cannot open serial port: %s – retry in 5 s", e)
-            time.sleep(5)
-
-
-def run() -> None:
-    client    = InfluxDBClient(url=INFLUX_URL, token=INFLUX_TOKEN, org=INFLUX_ORG)
-    write_api = client.write_api(write_options=SYNCHRONOUS)
-    ser       = open_serial()
-
-    LOG.info("Gateway running – waiting for mesh data")
-
-    while True:
-        try:
-            raw = ser.readline().decode("utf-8", errors="ignore").strip()
-            if not raw or not raw.startswith("{"):
-                continue
-
-            record = json.loads(raw)
-            required = {"node", "t", "h", "s"}
-            if not required.issubset(record):
-                LOG.debug("Incomplete record: %r", record)
-                continue
-
-            write_to_influx(write_api, record)
-
-        except json.JSONDecodeError:
-            LOG.debug("Bad JSON: %r", raw)
-
-        except serial.SerialException as e:
-            LOG.error("Serial error: %s – reconnecting", e)
+    def run(self):
+        ser = None
+        while self._running:
             try:
-                ser.close()
-            except Exception:
+                if ser is None:
+                    ser = serial.Serial(self._port, self._baud, timeout=2)
+                    self.status_changed.emit(f"Connected  {self._port} @ {self._baud}")
+
+                raw = ser.readline().decode("utf-8", errors="ignore").strip()
+                if not raw or not raw.startswith("{"):
+                    continue
+
+                record = json.loads(raw)
+                if {"node", "t", "h", "s"}.issubset(record):
+                    self.record_received.emit(record)
+
+            except json.JSONDecodeError:
                 pass
-            ser = open_serial()
+            except serial.SerialException as exc:
+                self.status_changed.emit(f"Serial error: {exc}  – reconnecting…")
+                if ser:
+                    try:
+                        ser.close()
+                    except Exception:
+                        pass
+                    ser = None
+                time.sleep(5)
 
-        except KeyboardInterrupt:
-            LOG.info("Shutting down")
-            break
+    def stop(self):
+        self._running = False
+        self.wait()
 
-        except Exception:
-            LOG.exception("Unhandled error")
 
-    ser.close()
-    client.close()
+# ---------------------------------------------------------------------------
+# Single node card widget
+# ---------------------------------------------------------------------------
+
+class NodeCard(QFrame):
+    def __init__(self, node_id: int, parent=None):
+        super().__init__(parent)
+        self._node_id  = node_id
+        self._gradient = GRADIENT.get(node_id, 0)
+
+        self.setFrameShape(QFrame.StyledPanel)
+        self.setMinimumWidth(130)
+        self.setSizePolicy(QSizePolicy.Expanding, QSizePolicy.Fixed)
+        self._set_bg(CARD_IDLE)
+
+        layout = QVBoxLayout(self)
+        layout.setContentsMargins(8, 6, 8, 6)
+        layout.setSpacing(2)
+
+        header = QHBoxLayout()
+        self._lbl_id = QLabel(f"Node {node_id}")
+        self._lbl_id.setFont(QFont("monospace", 9, QFont.Bold))
+        self._lbl_id.setStyleSheet(f"color: {TEXT_COLOUR};")
+        self._lbl_g  = QLabel(f"g{self._gradient}")
+        self._lbl_g.setStyleSheet("color: #888888; font-size: 8px;")
+        header.addWidget(self._lbl_id)
+        header.addStretch()
+        header.addWidget(self._lbl_g)
+        layout.addLayout(header)
+
+        self._lbl_t = self._make_row("—°C")
+        self._lbl_h = self._make_row("—%  hum")
+        self._lbl_s = self._make_row("—%  soil")
+        layout.addWidget(self._lbl_t)
+        layout.addWidget(self._lbl_h)
+        layout.addWidget(self._lbl_s)
+
+        self._lbl_ts = QLabel("never")
+        self._lbl_ts.setStyleSheet("color: #555555; font-size: 7px;")
+        layout.addWidget(self._lbl_ts)
+
+    def _make_row(self, text: str) -> QLabel:
+        lbl = QLabel(text)
+        lbl.setFont(QFont("monospace", 9))
+        lbl.setStyleSheet(f"color: {TEXT_COLOUR};")
+        return lbl
+
+    def _set_bg(self, colour: str):
+        self.setStyleSheet(
+            f"NodeCard {{ background-color: {colour}; border-radius: 6px; }}"
+        )
+
+    def update_reading(self, record: dict):
+        t = record["t"]
+        h = record["h"]
+        s = record["s"]
+
+        self._lbl_t.setText(f"{t:+.1f} °C")
+        self._lbl_h.setText(f"{h:.1f} %  hum")
+        self._lbl_s.setText(f"{s:.1f} %  soil")
+        self._lbl_ts.setText(datetime.now().strftime("%H:%M:%S"))
+
+        # Determine alert state (worst of the three sensors)
+        def state(val, key):
+            lo, hi = THRESHOLDS[key]["min"], THRESHOLDS[key]["max"]
+            margin = (hi - lo) * 0.1
+            if val < lo or val > hi:
+                return 2                        # red
+            if val < lo + margin or val > hi - margin:
+                return 1                        # amber
+            return 0                            # green
+
+        worst = max(state(t, "t"), state(h, "h"), state(s, "s"))
+        self._set_bg([CARD_GREEN, CARD_AMBER, CARD_RED][worst])
+
+
+# ---------------------------------------------------------------------------
+# Main window
+# ---------------------------------------------------------------------------
+
+class MainWindow(QMainWindow):
+    def __init__(self):
+        super().__init__()
+        self.setWindowTitle("PhytoSense – Sensor Dashboard")
+        self.setStyleSheet(f"background-color: {BG_COLOUR};")
+
+        self._cards: dict[int, NodeCard] = {}
+
+        central = QWidget()
+        self.setCentralWidget(central)
+        root = QVBoxLayout(central)
+        root.setContentsMargins(16, 12, 16, 12)
+        root.setSpacing(12)
+
+        # Title
+        title = QLabel("PhytoSense")
+        title.setFont(QFont("sans-serif", 18, QFont.Bold))
+        title.setStyleSheet(f"color: {TEXT_COLOUR};")
+        root.addWidget(title)
+
+        subtitle = QLabel("University of Oulu Botanical Garden  ·  20-node gradient mesh")
+        subtitle.setStyleSheet("color: #888888; font-size: 10px;")
+        root.addWidget(subtitle)
+
+        # Two-column layout: Romeo | Julia
+        cols = QHBoxLayout()
+        cols.setSpacing(24)
+        root.addLayout(cols)
+        cols.addWidget(self._build_greenhouse("Romeo", ROMEO_RINGS))
+        cols.addWidget(self._build_greenhouse("Julia",  JULIA_RINGS))
+
+        # Status bar
+        self._status = QStatusBar()
+        self._status.setStyleSheet("color: #888888; font-size: 9px;")
+        self.setStatusBar(self._status)
+        self._status.showMessage("Waiting for serial connection…")
+
+        # Serial reader
+        self._reader = SerialReader(SERIAL_PORT, SERIAL_BAUD)
+        self._reader.record_received.connect(self._on_record)
+        self._reader.status_changed.connect(self._status.showMessage)
+        self._reader.start()
+
+        # Heartbeat: grey out cards not seen for >120 s
+        self._last_seen: dict[int, float] = {}
+        timer = QTimer(self)
+        timer.timeout.connect(self._check_stale)
+        timer.start(10_000)
+
+    def _build_greenhouse(self, name: str, rings: dict) -> QGroupBox:
+        box = QGroupBox(name)
+        box.setStyleSheet(
+            f"QGroupBox {{ color: {TEXT_COLOUR}; border: 1px solid #333333;"
+            " border-radius: 8px; margin-top: 8px; padding: 4px; }}"
+            " QGroupBox::title { subcontrol-origin: margin; left: 10px; }"
+        )
+        layout = QVBoxLayout(box)
+        layout.setSpacing(8)
+
+        for g in sorted(rings):
+            ring_label = QLabel(f"gradient {g}")
+            ring_label.setStyleSheet("color: #555555; font-size: 8px;")
+            layout.addWidget(ring_label)
+
+            row = QHBoxLayout()
+            row.setSpacing(6)
+            for nid in rings[g]:
+                card = NodeCard(nid)
+                self._cards[nid] = card
+                row.addWidget(card)
+            row.addStretch()
+            layout.addLayout(row)
+
+        return box
+
+    def _on_record(self, record: dict):
+        nid = record.get("node")
+        if nid not in self._cards:
+            return
+        self._cards[nid].update_reading(record)
+        self._last_seen[nid] = time.monotonic()
+
+        hops = record.get("hops", 0)
+        self._status.showMessage(
+            f"{datetime.now().strftime('%H:%M:%S')}  "
+            f"node {nid} ({GREENHOUSE.get(nid,'?')}, g{GRADIENT.get(nid,'?')})  "
+            f"T={record['t']:.1f}°C  H={record['h']:.1f}%  S={record['s']:.1f}%  "
+            f"hops={hops}"
+        )
+
+    def _check_stale(self):
+        now = time.monotonic()
+        for nid, card in self._cards.items():
+            last = self._last_seen.get(nid, 0)
+            if now - last > 120:
+                card._set_bg(CARD_IDLE)
+
+    def closeEvent(self, event):
+        self._reader.stop()
+        super().closeEvent(event)
+
+
+# ---------------------------------------------------------------------------
+
+def main():
+    app = QApplication(sys.argv)
+    app.setStyle("Fusion")
+
+    # Dark palette
+    palette = QPalette()
+    palette.setColor(QPalette.Window,          QColor(18, 18, 18))
+    palette.setColor(QPalette.WindowText,      QColor(232, 232, 232))
+    palette.setColor(QPalette.Base,            QColor(30, 30, 30))
+    palette.setColor(QPalette.AlternateBase,   QColor(42, 42, 42))
+    palette.setColor(QPalette.Text,            QColor(232, 232, 232))
+    palette.setColor(QPalette.Button,          QColor(42, 42, 42))
+    palette.setColor(QPalette.ButtonText,      QColor(232, 232, 232))
+    palette.setColor(QPalette.Highlight,       QColor(42, 130, 218))
+    palette.setColor(QPalette.HighlightedText, QColor(0, 0, 0))
+    app.setPalette(palette)
+
+    win = MainWindow()
+    win.resize(1100, 600)
+    win.show()
+    sys.exit(app.exec())
 
 
 if __name__ == "__main__":
-    run()
+    main()

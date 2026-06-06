@@ -9,6 +9,10 @@
 #include <string.h>
 #include <stdio.h>
 
+#ifdef HOST_SIM
+#include "transport.h"
+#endif
+
 #define TAG "gradient_mesh"
 
 /* ---- Neighbour table ---- */
@@ -26,7 +30,8 @@ static uint8_t     s_gradient;
 static uint16_t    s_unicast;
 static bool        s_provisioned;
 
-/* ---- BLE Mesh model composition ---- */
+#ifndef HOST_SIM
+/* ---- BLE Mesh model composition (device build only) ---- */
 
 static esp_ble_mesh_model_op_t s_vnd_ops[] = {
     ESP_BLE_MESH_MODEL_OP(OP_SENSOR_DATA,  sizeof(sensor_data_msg_t)),
@@ -59,6 +64,7 @@ static esp_ble_mesh_comp_t s_comp = {
 /* Pre-shared keys embedded at compile time */
 static uint8_t s_net_key[16] = MESH_NET_KEY;
 static uint8_t s_app_key[16] = MESH_APP_KEY;
+#endif /* HOST_SIM */
 
 /* ---- Neighbour table helpers ---- */
 
@@ -129,16 +135,19 @@ static esp_err_t mesh_send(uint16_t dst, uint32_t opcode,
 {
     if (!s_provisioned) return ESP_ERR_INVALID_STATE;
 
+#ifndef HOST_SIM
     esp_ble_mesh_msg_ctx_t ctx = {
         .net_idx  = 0,
         .app_idx  = 0,
         .addr     = dst,
         .send_ttl = BLE_MESH_TTL_DEFAULT,
     };
-
     return esp_ble_mesh_server_model_send_msg(
                &s_vnd_models[0], &ctx, opcode,
                (uint16_t)len, (uint8_t *)data);
+#else
+    return transport_send(s_unicast, dst, opcode, data, len);
+#endif
 }
 
 /* ---- Public API ---- */
@@ -147,12 +156,13 @@ esp_err_t gradient_mesh_init(uint8_t node_id, uint8_t gradient,
                               uint8_t dev_uuid[16],
                               prov_cb_t prov_cb, model_cb_t model_cb)
 {
-    s_node_id    = node_id;
-    s_gradient   = gradient;
-    s_unicast    = node_id_to_unicast(node_id);
+    s_node_id     = node_id;
+    s_gradient    = gradient;
+    s_unicast     = node_id_to_unicast(node_id);
     s_provisioned = false;
     memset(s_nbrs, 0, sizeof(s_nbrs));
 
+#ifndef HOST_SIM
     esp_ble_mesh_prov_t prov = {
         .uuid           = dev_uuid,
         .static_val     = s_net_key,
@@ -174,6 +184,11 @@ esp_err_t gradient_mesh_init(uint8_t node_id, uint8_t gradient,
         ESP_BLE_MESH_PROV_ADV | ESP_BLE_MESH_PROV_GATT));
 
     ESP_LOGI(TAG, "Node %d (g=%d) advertising for provisioning", node_id, gradient);
+#else
+    (void)dev_uuid; (void)prov_cb; (void)model_cb;
+    ESP_LOGI(TAG, "Node %d (g=%d) sim init OK", node_id, gradient);
+#endif
+
     return ESP_OK;
 }
 
