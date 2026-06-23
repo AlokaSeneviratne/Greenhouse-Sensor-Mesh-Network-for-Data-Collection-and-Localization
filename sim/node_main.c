@@ -93,6 +93,18 @@ int main(void)
     g_sim_node_id   = (uint8_t)atoi(env_id);
     g_sim_gradient  = (uint8_t)atoi(env_g);
 
+    /*
+     * The hub prints newline JSON to stdout. When stdout is redirected to a
+     * file or pipe it is block-buffered by default, so a downstream reader
+     * (tail -f / Get-Content -Wait / gateway.py) sees nothing until a ~4 KB
+     * block fills, and lines are lost entirely if the process is killed before
+     * a flush. Unbuffered output emits each reading immediately and, unlike
+     * _IOLBF, is honoured on Windows too (the MSVC runtime treats _IOLBF as
+     * full buffering). Hub output is one short line per reading, so the cost of
+     * no buffering is negligible.
+     */
+    setvbuf(stdout, NULL, _IONBF, 0);
+
     fprintf(stderr, "[main] Node %d  gradient=%d  starting\n",
             g_sim_node_id, g_sim_gradient);
 

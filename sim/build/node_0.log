@@ -1,0 +1,4 @@
+[main] Node 0  gradient=0  starting
+[I][transport] Node 0: send->broker:7000  recv<-port:7100
+[I][gradient_mesh] Node 0 (g=0) sim init OK
+[I][gradient_mesh] Provisioned: 0x0001  gradient=0

@@ -44,8 +44,6 @@ import logging
 import math
 import random
 import struct
-import time
-from collections import defaultdict
 
 import websockets
 

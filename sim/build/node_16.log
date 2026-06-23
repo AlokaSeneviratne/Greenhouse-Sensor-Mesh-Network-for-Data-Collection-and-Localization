@@ -1,0 +1,22 @@
+[main] Node 16  gradient=2  starting
+[I][transport] Node 16: send->broker:7000  recv<-port:7116
+[I][sensors_sim] Sim sensors ready (node 16)
+[I][gradient_mesh] Node 16 (g=2) sim init OK
+[I][gradient_mesh] Provisioned: 0x0011  gradient=2
+[I][gradient_mesh] Node 16 → 0x000e  T=21.3 H=61.5 S=42.0
+[I][gradient_mesh] Node 16 → 0x000e  T=21.1 H=62.2 S=38.5
+[I][gradient_mesh] Node 16 → 0x000e  T=21.1 H=61.4 S=38.2
+[I][gradient_mesh] Node 16 → 0x000e  T=21.1 H=62.5 S=41.9
+[I][gradient_mesh] Node 16 → 0x000e  T=21.1 H=61.0 S=39.9
+[I][gradient_mesh] Node 16 → 0x000e  T=20.7 H=61.9 S=41.1
+[I][gradient_mesh] Node 16 → 0x000e  T=20.7 H=61.0 S=40.8
+[I][gradient_mesh] Node 16 → 0x000e  T=20.7 H=62.2 S=40.4
+[I][gradient_mesh] Node 16 → 0x000e  T=20.7 H=60.6 S=38.5
+[I][gradient_mesh] Node 16 → 0x000e  T=20.7 H=61.8 S=38.1
+[I][gradient_mesh] Node 16 → 0x000e  T=20.4 H=61.1 S=40.3
+[I][gradient_mesh] Node 16 → 0x000e  T=20.4 H=60.3 S=40.0
+[I][gradient_mesh] Node 16 → 0x000e  T=20.4 H=61.4 S=39.7
+[I][gradient_mesh] Node 16 → 0x000e  T=20.4 H=60.6 S=39.4
+[I][gradient_mesh] Node 16 → 0x000e  T=20.6 H=61.5 S=40.6
+[I][gradient_mesh] Node 16 → 0x000e  T=20.6 H=60.6 S=40.3
+[I][gradient_mesh] Node 16 → 0x000e  T=20.6 H=59.7 S=40.0

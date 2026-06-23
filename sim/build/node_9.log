@@ -1,0 +1,22 @@
+[main] Node 9  gradient=3  starting
+[I][transport] Node 9: send->broker:7000  recv<-port:7109
+[I][sensors_sim] Sim sensors ready (node 9)
+[I][gradient_mesh] Node 9 (g=3) sim init OK
+[I][gradient_mesh] Provisioned: 0x000a  gradient=3
+[I][gradient_mesh] Node 9 → 0x0006  T=26.1 H=73.8 S=55.8
+[I][gradient_mesh] Node 9 → 0x0006  T=26.0 H=74.1 S=56.7
+[I][gradient_mesh] Node 9 → 0x0006  T=26.0 H=75.2 S=56.4
+[I][gradient_mesh] Node 9 → 0x0006  T=25.8 H=73.5 S=53.3
+[I][gradient_mesh] Node 9 → 0x0006  T=25.9 H=74.6 S=56.0
+[I][gradient_mesh] Node 9 → 0x0006  T=25.5 H=73.9 S=54.9
+[I][gradient_mesh] Node 9 → 0x0006  T=25.5 H=75.0 S=54.6
+[I][gradient_mesh] Node 9 → 0x0006  T=25.4 H=73.3 S=55.6
+[I][gradient_mesh] Node 9 → 0x0006  T=25.3 H=73.1 S=56.9
+[I][gradient_mesh] Node 9 → 0x0006  T=25.8 H=73.4 S=53.9
+[I][gradient_mesh] Node 9 → 0x0006  T=25.2 H=74.5 S=53.5
+[I][gradient_mesh] Node 9 → 0x0006  T=25.7 H=72.8 S=54.5
+[I][gradient_mesh] Node 9 → 0x0006  T=25.6 H=73.9 S=54.2
+[I][gradient_mesh] Node 9 → 0x0006  T=25.5 H=74.2 S=55.1
+[I][gradient_mesh] Node 9 → 0x0006  T=25.5 H=73.3 S=54.8
+[I][gradient_mesh] Node 9 → 0x0006  T=25.4 H=73.6 S=55.7
+[I][gradient_mesh] Node 9 → 0x0006  T=25.4 H=72.7 S=55.4

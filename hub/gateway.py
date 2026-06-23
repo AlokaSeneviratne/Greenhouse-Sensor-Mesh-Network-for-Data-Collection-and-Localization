@@ -11,11 +11,13 @@ Run on Raspberry Pi:
 """
 
 import json
+import os
 import sys
 import time
 from datetime import datetime
 
-import serial
+# pyserial is imported lazily inside the serial reader so that stdin mode
+# (SERIAL_PORT = "-") runs on a dev machine without pyserial installed.
 from PySide6.QtCore import QThread, Signal, QTimer
 from PySide6.QtGui import QFont, QColor, QPalette
 from PySide6.QtWidgets import (
@@ -25,7 +27,13 @@ from PySide6.QtWidgets import (
 )
 
 # ---- Site configuration ----
-SERIAL_PORT = "/dev/ttyUSB0"
+# Source of newline-delimited JSON. "-" reads stdin, which lets the simulation
+# drive the dashboard directly:
+#   tail -f sim/build/hub_stdout.log | python3 hub/gateway.py -
+# A command-line argument or the PHYTOSENSE_PORT env var overrides the default.
+SERIAL_PORT = os.environ.get("PHYTOSENSE_PORT", "/dev/ttyUSB0")
+if len(sys.argv) > 1:
+    SERIAL_PORT = sys.argv[1]
 SERIAL_BAUD = 115200
 
 THRESHOLDS = {
@@ -74,6 +82,49 @@ class SerialReader(QThread):
         self._running = True
 
     def run(self):
+        if self._port == "-":
+            self._run_stdin()
+        elif os.path.isfile(self._port):
+            self._run_file(self._port)
+        else:
+            self._run_serial()
+
+    def _run_file(self, path):
+        self.status_changed.emit(f"Following {path}")
+        # Poll the hub log for new lines, the way `tail -f` does. This keeps the
+        # dashboard off any shell pipe, since PowerShell's `Get-Content -Wait`
+        # does not reliably stream into a child process stdin in real time.
+        with open(path, "r", encoding="utf-8", errors="ignore") as f:
+            while self._running:
+                line = f.readline()
+                if line:
+                    self._emit_line(line)
+                else:
+                    time.sleep(0.2)
+
+    def _emit_line(self, raw: str) -> None:
+        raw = raw.strip()
+        if not raw or not raw.startswith("{"):
+            return
+        try:
+            record = json.loads(raw)
+        except json.JSONDecodeError:
+            return
+        if {"node", "t", "h", "s"}.issubset(record):
+            self.record_received.emit(record)
+
+    def _run_stdin(self):
+        self.status_changed.emit("Reading JSON from stdin")
+        # Iterating sys.stdin blocks until each line arrives, which is the
+        # behaviour wanted behind a `tail -f | gateway.py -` pipe.
+        for raw in sys.stdin:
+            if not self._running:
+                break
+            self._emit_line(raw)
+        self.status_changed.emit("stdin closed")
+
+    def _run_serial(self):
+        import serial   # only needed when talking to a real device
         ser = None
         while self._running:
             try:
@@ -81,18 +132,11 @@ class SerialReader(QThread):
                     ser = serial.Serial(self._port, self._baud, timeout=2)
                     self.status_changed.emit(f"Connected  {self._port} @ {self._baud}")
 
-                raw = ser.readline().decode("utf-8", errors="ignore").strip()
-                if not raw or not raw.startswith("{"):
-                    continue
+                raw = ser.readline().decode("utf-8", errors="ignore")
+                self._emit_line(raw)
 
-                record = json.loads(raw)
-                if {"node", "t", "h", "s"}.issubset(record):
-                    self.record_received.emit(record)
-
-            except json.JSONDecodeError:
-                pass
             except serial.SerialException as exc:
-                self.status_changed.emit(f"Serial error: {exc}  – reconnecting…")
+                self.status_changed.emit(f"Serial error: {exc}  reconnecting...")
                 if ser:
                     try:
                         ser.close()
@@ -116,9 +160,9 @@ class NodeCard(QFrame):
         self._node_id  = node_id
         self._gradient = GRADIENT.get(node_id, 0)
 
-        self.setFrameShape(QFrame.StyledPanel)
+        self.setFrameShape(QFrame.Shape.StyledPanel)
         self.setMinimumWidth(130)
-        self.setSizePolicy(QSizePolicy.Expanding, QSizePolicy.Fixed)
+        self.setSizePolicy(QSizePolicy.Policy.Expanding, QSizePolicy.Policy.Fixed)
         self._set_bg(CARD_IDLE)
 
         layout = QVBoxLayout(self)
@@ -127,7 +171,7 @@ class NodeCard(QFrame):
 
         header = QHBoxLayout()
         self._lbl_id = QLabel(f"Node {node_id}")
-        self._lbl_id.setFont(QFont("monospace", 9, QFont.Bold))
+        self._lbl_id.setFont(QFont("monospace", 9, QFont.Weight.Bold))
         self._lbl_id.setStyleSheet(f"color: {TEXT_COLOUR};")
         self._lbl_g  = QLabel(f"g{self._gradient}")
         self._lbl_g.setStyleSheet("color: #888888; font-size: 8px;")
@@ -202,7 +246,7 @@ class MainWindow(QMainWindow):
 
         # Title
         title = QLabel("PhytoSense")
-        title.setFont(QFont("sans-serif", 18, QFont.Bold))
+        title.setFont(QFont("sans-serif", 18, QFont.Weight.Bold))
         title.setStyleSheet(f"color: {TEXT_COLOUR};")
         root.addWidget(title)
 
@@ -296,15 +340,15 @@ def main():
 
     # Dark palette
     palette = QPalette()
-    palette.setColor(QPalette.Window,          QColor(18, 18, 18))
-    palette.setColor(QPalette.WindowText,      QColor(232, 232, 232))
-    palette.setColor(QPalette.Base,            QColor(30, 30, 30))
-    palette.setColor(QPalette.AlternateBase,   QColor(42, 42, 42))
-    palette.setColor(QPalette.Text,            QColor(232, 232, 232))
-    palette.setColor(QPalette.Button,          QColor(42, 42, 42))
-    palette.setColor(QPalette.ButtonText,      QColor(232, 232, 232))
-    palette.setColor(QPalette.Highlight,       QColor(42, 130, 218))
-    palette.setColor(QPalette.HighlightedText, QColor(0, 0, 0))
+    palette.setColor(QPalette.ColorRole.Window,          QColor(18, 18, 18))
+    palette.setColor(QPalette.ColorRole.WindowText,      QColor(232, 232, 232))
+    palette.setColor(QPalette.ColorRole.Base,            QColor(30, 30, 30))
+    palette.setColor(QPalette.ColorRole.AlternateBase,   QColor(42, 42, 42))
+    palette.setColor(QPalette.ColorRole.Text,            QColor(232, 232, 232))
+    palette.setColor(QPalette.ColorRole.Button,          QColor(42, 42, 42))
+    palette.setColor(QPalette.ColorRole.ButtonText,      QColor(232, 232, 232))
+    palette.setColor(QPalette.ColorRole.Highlight,       QColor(42, 130, 218))
+    palette.setColor(QPalette.ColorRole.HighlightedText, QColor(0, 0, 0))
     app.setPalette(palette)
 
     win = MainWindow()

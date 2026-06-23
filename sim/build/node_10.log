@@ -1,0 +1,22 @@
+[main] Node 10  gradient=3  starting
+[I][transport] Node 10: send->broker:7000  recv<-port:7110
+[I][sensors_sim] Sim sensors ready (node 10)
+[I][gradient_mesh] Node 10 (g=3) sim init OK
+[I][gradient_mesh] Provisioned: 0x000b  gradient=3
+[I][gradient_mesh] Node 10 → 0x0007  T=25.9 H=74.5 S=55.0
+[I][gradient_mesh] Node 10 → 0x0007  T=25.7 H=75.6 S=55.4
+[I][gradient_mesh] Node 10 → 0x0007  T=26.0 H=73.7 S=53.1
+[I][gradient_mesh] Node 10 → 0x0007  T=25.5 H=75.0 S=53.1
+[I][gradient_mesh] Node 10 → 0x0007  T=25.8 H=75.1 S=54.8
+[I][gradient_mesh] Node 10 → 0x0007  T=25.7 H=74.7 S=56.2
+[I][gradient_mesh] Node 10 → 0x0007  T=25.4 H=74.8 S=53.9
+[I][gradient_mesh] Node 10 → 0x0007  T=25.6 H=74.1 S=56.8
+[I][gradient_mesh] Node 10 → 0x0007  T=25.3 H=73.5 S=56.8
+[I][gradient_mesh] Node 10 → 0x0007  T=25.7 H=74.5 S=53.3
+[I][gradient_mesh] Node 10 → 0x0007  T=25.4 H=74.7 S=55.0
+[I][gradient_mesh] Node 10 → 0x0007  T=25.6 H=73.9 S=53.9
+[I][gradient_mesh] Node 10 → 0x0007  T=25.2 H=74.1 S=55.6
+[I][gradient_mesh] Node 10 → 0x0007  T=25.2 H=73.6 S=53.0
+[I][gradient_mesh] Node 10 → 0x0007  T=25.5 H=73.7 S=54.7
+[I][gradient_mesh] Node 10 → 0x0007  T=25.1 H=73.0 S=53.7
+[I][gradient_mesh] Node 10 → 0x0007  T=25.4 H=73.1 S=55.3

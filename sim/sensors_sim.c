@@ -14,8 +14,8 @@
 #include "topology.h"
 #include "esp_log.h"
 #include <math.h>
+#include <stdbool.h>
 #include <time.h>
-#include <string.h>
 
 #define TAG "sensors_sim"
 

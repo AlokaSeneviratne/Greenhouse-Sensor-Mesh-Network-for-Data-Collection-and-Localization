@@ -1,0 +1,255 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<title>PhytoSense Staff Dashboard</title>
+<style>
+  * { box-sizing: border-box; margin: 0; padding: 0; }
+  body { background: #0f0f0f; color: #ddd; font-family: monospace; }
+
+  #header { padding: 10px 16px; background: #1a1a1a; border-bottom: 1px solid #2a2a2a;
+            display: flex; align-items: baseline; gap: 16px; flex-wrap: wrap; }
+  #header h1 { font-size: 16px; color: #ccc; }
+  #status  { font-size: 11px; color: #666; }
+  #summary { font-size: 11px; color: #888; margin-left: auto; }
+  #summary .red   { color: #e8736b; }
+  #summary .amber { color: #d9a441; }
+  #summary .green { color: #6fce8f; }
+
+  #legend { font-size: 10px; color: #555; padding: 6px 16px; display: flex; gap: 14px;
+            border-bottom: 1px solid #1a1a1a; }
+  .swatch { display: inline-block; width: 10px; height: 10px; border-radius: 2px;
+            vertical-align: middle; margin-right: 4px; }
+
+  #houses { display: flex; gap: 24px; padding: 16px; align-items: flex-start; flex-wrap: wrap; }
+  .house  { flex: 1; min-width: 320px; }
+  .house h2 { font-size: 13px; color: #bbb; margin-bottom: 4px; font-weight: normal; }
+  .house .sub { font-size: 9px; color: #555; margin-bottom: 10px; }
+
+  .ring { margin-bottom: 12px; }
+  .ring-label { font-size: 9px; color: #555; margin-bottom: 4px; }
+  .cards { display: flex; gap: 8px; flex-wrap: wrap; }
+
+  .card { width: 132px; border-radius: 6px; padding: 8px 9px; background: #2a2a2a;
+          border: 1px solid #00000040; transition: background 0.3s; }
+  .card .top { display: flex; justify-content: space-between; align-items: center;
+               margin-bottom: 4px; }
+  .card .nid  { font-size: 11px; font-weight: bold; color: #e8e8e8; }
+  .card .grad { font-size: 8px; color: #999; }
+  .card .val  { font-size: 11px; color: #e8e8e8; line-height: 1.5; }
+  .card .foot { font-size: 7px; color: #00000080; margin-top: 4px; }
+  .card.stale { opacity: 0.45; }
+  .card.dead  { opacity: 0.3; }
+</style>
+</head>
+<body>
+
+<div id="header">
+  <h1>PhytoSense — staff dashboard</h1>
+  <span id="status">connecting…</span>
+  <span id="summary"></span>
+</div>
+
+<div id="legend">
+  <span><span class="swatch" style="background:#1e4620"></span>nominal</span>
+  <span><span class="swatch" style="background:#7a4a00"></span>near limit</span>
+  <span><span class="swatch" style="background:#7a1a1a"></span>out of range</span>
+  <span><span class="swatch" style="background:#2a2a2a"></span>no data / offline</span>
+</div>
+
+<div id="houses">
+  <div class="house" id="house-R">
+    <h2>Romeo</h2>
+    <div class="sub">tropical / subtropical</div>
+  </div>
+  <div class="house" id="house-J">
+    <h2>Julia</h2>
+    <div class="sub">mediterranean / desert / temperate</div>
+  </div>
+</div>
+
+<script>
+// ---------------------------------------------------------------------------
+// Alert thresholds (identical to gateway.py THRESHOLDS)
+// ---------------------------------------------------------------------------
+const THRESHOLDS = {
+  t: { min: 10.0, max: 35.0,  label: 'Temp \u00b0C' },
+  h: { min: 40.0, max: 95.0,  label: 'Humidity %' },
+  s: { min: 20.0, max: 100.0, label: 'Soil %' },
+};
+
+const CARD = ['#1e4620', '#7a4a00', '#7a1a1a'];  // green, amber, red
+const CARD_IDLE = '#2a2a2a';
+const STALE_MS  = 120000;   // grey a card not seen for 2 min (matches gateway)
+
+// One sensor's alert state: 0 nominal, 1 near limit, 2 out of range
+function channelState(val, key) {
+  const { min: lo, max: hi } = THRESHOLDS[key];
+  const margin = (hi - lo) * 0.1;
+  if (val < lo || val > hi)               return 2;
+  if (val < lo + margin || val > hi - margin) return 1;
+  return 0;
+}
+
+// ---------------------------------------------------------------------------
+// State
+// ---------------------------------------------------------------------------
+const cards = {};   // nid -> { el, valEl, footEl, gradient, location, lastSeen, alive, worst }
+let ws = null;
+
+// ---------------------------------------------------------------------------
+// Build cards from the topology snapshot
+// ---------------------------------------------------------------------------
+function buildCards(nodes) {
+  // group by location -> gradient ring
+  const houses = { R: {}, J: {} };
+  for (const n of nodes) {
+    if (n.location !== 'R' && n.location !== 'J') continue;  // skip hub
+    (houses[n.location][n.gradient] ||= []).push(n);
+  }
+
+  for (const loc of ['R', 'J']) {
+    const houseEl = document.getElementById('house-' + loc);
+    const rings = Object.keys(houses[loc]).map(Number).sort((a, b) => a - b);
+
+    for (const g of rings) {
+      const ringEl = document.createElement('div');
+      ringEl.className = 'ring';
+      ringEl.innerHTML = `<div class="ring-label">gradient ${g}</div>`;
+
+      const cardsEl = document.createElement('div');
+      cardsEl.className = 'cards';
+
+      for (const n of houses[loc][g].sort((a, b) => a.id - b.id)) {
+        const el = document.createElement('div');
+        el.className = 'card';
+        el.style.background = CARD_IDLE;
+        el.innerHTML = `
+          <div class="top">
+            <span class="nid">Node ${n.id}</span>
+            <span class="grad">g${n.gradient}</span>
+          </div>
+          <div class="val" id="val-${n.id}">—</div>
+          <div class="foot" id="foot-${n.id}">never</div>`;
+        cardsEl.appendChild(el);
+
+        cards[n.id] = {
+          el,
+          valEl:  el.querySelector(`#val-${n.id}`),
+          footEl: el.querySelector(`#foot-${n.id}`),
+          gradient: n.gradient, location: loc,
+          lastSeen: 0, alive: n.alive !== false, worst: -1,
+        };
+        if (!cards[n.id].alive) el.classList.add('dead');
+      }
+      ringEl.appendChild(cardsEl);
+      houseEl.appendChild(ringEl);
+    }
+  }
+}
+
+// ---------------------------------------------------------------------------
+// Apply a reading
+// ---------------------------------------------------------------------------
+function updateCard(r) {
+  const c = cards[r.id];
+  if (!c) return;
+
+  c.valEl.innerHTML =
+    `${(+r.t).toFixed(1)} \u00b0C<br>${(+r.h).toFixed(0)} % hum<br>${(+r.s).toFixed(0)} % soil`;
+
+  const worst = Math.max(channelState(+r.t, 't'),
+                         channelState(+r.h, 'h'),
+                         channelState(+r.s, 's'));
+  c.worst = worst;
+  c.el.style.background = CARD[worst];
+  c.el.classList.remove('stale');
+
+  const now = new Date();
+  const hh = String(now.getHours()).padStart(2, '0');
+  const mm = String(now.getMinutes()).padStart(2, '0');
+  const ss = String(now.getSeconds()).padStart(2, '0');
+  c.footEl.textContent = `${hh}:${mm}:${ss}  ·  ${r.hops ?? '?'} hop${r.hops === 1 ? '' : 's'}`;
+  c.lastSeen = performance.now();
+
+  refreshSummary();
+}
+
+function setAlive(nid, alive) {
+  const c = cards[nid];
+  if (!c) return;
+  c.alive = alive;
+  c.el.classList.toggle('dead', !alive);
+  refreshSummary();
+}
+
+// Grey out cards we have not heard from in a while
+function checkStale() {
+  const now = performance.now();
+  for (const nid in cards) {
+    const c = cards[nid];
+    if (c.lastSeen && (now - c.lastSeen) > STALE_MS) {
+      c.el.classList.add('stale');
+      c.el.style.background = CARD_IDLE;
+      c.worst = -1;
+    }
+  }
+  refreshSummary();
+}
+setInterval(checkStale, 10000);
+
+// Header summary counts
+function refreshSummary() {
+  let green = 0, amber = 0, red = 0, off = 0;
+  for (const nid in cards) {
+    const c = cards[nid];
+    if (!c.alive || c.worst < 0) { off++; continue; }
+    if (c.worst === 2) red++;
+    else if (c.worst === 1) amber++;
+    else green++;
+  }
+  document.getElementById('summary').innerHTML =
+    `<span class="green">${green} ok</span> · ` +
+    `<span class="amber">${amber} near</span> · ` +
+    `<span class="red">${red} alert</span> · ${off} offline`;
+}
+
+// ---------------------------------------------------------------------------
+// WebSocket (same broker as viewer.html)
+// ---------------------------------------------------------------------------
+function connect() {
+  const statusEl = document.getElementById('status');
+  ws = new WebSocket('ws://localhost:8765');
+
+  ws.onopen = () => {
+    statusEl.textContent = 'connected  ws://localhost:8765';
+    statusEl.style.color = '#6fce8f';
+  };
+  ws.onclose = () => {
+    statusEl.textContent = 'disconnected — retrying in 3 s…';
+    statusEl.style.color = '#e8736b';
+    setTimeout(connect, 3000);
+  };
+  ws.onerror = () => {};
+
+  ws.onmessage = ev => {
+    let msg;
+    try { msg = JSON.parse(ev.data); } catch { return; }
+
+    switch (msg.type) {
+      case 'topology':
+        // (re)build only once
+        if (Object.keys(cards).length === 0) buildCards(msg.nodes);
+        for (const n of msg.nodes) setAlive(n.id, n.alive);
+        break;
+      case 'node_update': updateCard(msg);            break;
+      case 'alive':       setAlive(msg.id, msg.alive); break;
+      // 'packet' events are ignored here; this view is about values, not routing
+    }
+  };
+}
+
+connect();
+</script>
+</body>
+</html>

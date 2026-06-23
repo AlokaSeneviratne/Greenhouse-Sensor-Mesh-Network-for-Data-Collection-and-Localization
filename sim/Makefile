@@ -1,9 +1,10 @@
 CC      := gcc
 CFLAGS  := -Wall -Wextra -DHOST_SIM \
             -I sim/shims \
+            -I sim \
             -I firmware/main \
             -g -O2 -pthread
-LDFLAGS := -pthread -lm
+LDLIBS  := -pthread -lm
 
 OUT     := sim/build/phytosense_sim
 
@@ -19,9 +20,10 @@ all: sim/build $(OUT)
 sim/build:
 	mkdir -p sim/build
 
-# Compile all sources in a single shot – simple enough for four files
+# Libraries must come after the objects on the link line, or libm symbols
+# (e.g. sin) referenced by sensors_sim.c stay unresolved.
 $(OUT): $(SRCS)
-	$(CC) $(CFLAGS) $(LDFLAGS) -o $@ $^
+	$(CC) $(CFLAGS) -o $@ $^ $(LDLIBS)
 	@echo "Built: $@"
 
 clean:
