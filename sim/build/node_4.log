@@ -3,20 +3,6 @@
 [I][sensors_sim] Sim sensors ready (node 4)
 [I][gradient_mesh] Node 4 (g=2) sim init OK
 [I][gradient_mesh] Provisioned: 0x0005  gradient=2
-[I][gradient_mesh] Node 4 → 0x0002  T=26.1 H=74.1 S=56.2
-[I][gradient_mesh] Node 4 → 0x0002  T=26.2 H=73.0 S=53.6
-[I][gradient_mesh] Node 4 → 0x0002  T=26.1 H=73.7 S=53.9
-[I][gradient_mesh] Node 4 → 0x0002  T=26.2 H=73.3 S=57.0
-[I][gradient_mesh] Node 4 → 0x0002  T=26.1 H=74.0 S=53.3
-[I][gradient_mesh] Node 4 → 0x0002  T=25.8 H=72.6 S=54.3
-[I][gradient_mesh] Node 4 → 0x0002  T=25.8 H=73.3 S=54.7
-[I][gradient_mesh] Node 4 → 0x0002  T=25.8 H=74.2 S=56.0
-[I][gradient_mesh] Node 4 → 0x0002  T=25.8 H=72.9 S=56.4
-[I][gradient_mesh] Node 4 → 0x0002  T=25.8 H=72.5 S=55.4
-[I][gradient_mesh] Node 4 → 0x0002  T=25.8 H=73.2 S=55.7
-[I][gradient_mesh] Node 4 → 0x0002  T=25.8 H=72.8 S=54.8
-[I][gradient_mesh] Node 4 → 0x0002  T=25.7 H=73.5 S=55.1
-[I][gradient_mesh] Node 4 → 0x0002  T=25.8 H=73.0 S=54.2
-[I][gradient_mesh] Node 4 → 0x0002  T=25.7 H=71.7 S=54.5
-[I][gradient_mesh] Node 4 → 0x0002  T=25.2 H=73.3 S=53.5
-[I][gradient_mesh] Node 4 → 0x0002  T=25.7 H=72.0 S=53.9
+[I][gradient_mesh] Node 4 → 0x0002  T=25.3 H=72.6 S=55.4
+[I][gradient_mesh] Node 4 → 0x0002  T=25.2 H=71.3 S=55.7
+[I][gradient_mesh] Node 4 → 0x0002  T=25.3 H=72.9 S=54.8

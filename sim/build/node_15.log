@@ -3,20 +3,6 @@
 [I][sensors_sim] Sim sensors ready (node 15)
 [I][gradient_mesh] Node 15 (g=2) sim init OK
 [I][gradient_mesh] Provisioned: 0x0010  gradient=2
-[I][gradient_mesh] Node 15 → 0x000e  T=21.2 H=61.3 S=41.2
-[I][gradient_mesh] Node 15 → 0x000e  T=21.1 H=62.7 S=39.2
-[I][gradient_mesh] Node 15 → 0x000e  T=21.0 H=61.4 S=39.5
-[I][gradient_mesh] Node 15 → 0x000e  T=21.0 H=62.1 S=39.8
-[I][gradient_mesh] Node 15 → 0x000e  T=20.9 H=60.8 S=40.2
-[I][gradient_mesh] Node 15 → 0x000e  T=21.0 H=60.7 S=39.1
-[I][gradient_mesh] Node 15 → 0x000e  T=20.9 H=61.4 S=39.5
-[I][gradient_mesh] Node 15 → 0x000e  T=20.8 H=62.1 S=39.8
-[I][gradient_mesh] Node 15 → 0x000e  T=20.7 H=60.8 S=40.1
-[I][gradient_mesh] Node 15 → 0x000e  T=20.7 H=61.5 S=40.4
-[I][gradient_mesh] Node 15 → 0x000e  T=20.6 H=60.9 S=38.4
-[I][gradient_mesh] Node 15 → 0x000e  T=20.5 H=61.6 S=38.7
-[I][gradient_mesh] Node 15 → 0x000e  T=20.4 H=60.3 S=39.0
-[I][gradient_mesh] Node 15 → 0x000e  T=20.4 H=61.0 S=39.3
-[I][gradient_mesh] Node 15 → 0x000e  T=20.2 H=61.2 S=38.6
-[I][gradient_mesh] Node 15 → 0x000e  T=20.7 H=59.9 S=38.9
-[I][gradient_mesh] Node 15 → 0x000e  T=20.6 H=60.6 S=39.2
+[I][gradient_mesh] Node 15 → 0x000e  T=20.4 H=59.8 S=40.4
+[I][gradient_mesh] Node 15 → 0x000e  T=20.3 H=60.5 S=40.7
+[I][gradient_mesh] Node 15 → 0x000e  T=20.3 H=61.2 S=41.0

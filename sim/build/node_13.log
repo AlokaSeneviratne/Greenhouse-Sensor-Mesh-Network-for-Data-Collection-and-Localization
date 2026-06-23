@@ -3,20 +3,6 @@
 [I][sensors_sim] Sim sensors ready (node 13)
 [I][gradient_mesh] Node 13 (g=1) sim init OK
 [I][gradient_mesh] Provisioned: 0x000e  gradient=1
-[I][gradient_mesh] Node 13 → 0x0001  T=21.4 H=61.2 S=41.1
-[I][gradient_mesh] Node 13 → 0x0001  T=21.3 H=61.9 S=41.4
-[I][gradient_mesh] Node 13 → 0x0001  T=21.3 H=60.6 S=40.7
-[I][gradient_mesh] Node 13 → 0x0001  T=21.3 H=61.3 S=41.0
-[I][gradient_mesh] Node 13 → 0x0001  T=21.2 H=60.0 S=41.3
-[I][gradient_mesh] Node 13 → 0x0001  T=21.1 H=60.7 S=41.6
-[I][gradient_mesh] Node 13 → 0x0001  T=21.1 H=61.4 S=41.9
-[I][gradient_mesh] Node 13 → 0x0001  T=21.0 H=60.8 S=39.9
-[I][gradient_mesh] Node 13 → 0x0001  T=20.9 H=61.5 S=40.2
-[I][gradient_mesh] Node 13 → 0x0001  T=20.8 H=60.2 S=40.5
-[I][gradient_mesh] Node 13 → 0x0001  T=20.8 H=60.9 S=40.9
-[I][gradient_mesh] Node 13 → 0x0001  T=20.7 H=59.6 S=41.2
-[I][gradient_mesh] Node 13 → 0x0001  T=20.6 H=60.3 S=41.5
-[I][gradient_mesh] Node 13 → 0x0001  T=20.6 H=61.0 S=41.8
-[I][gradient_mesh] Node 13 → 0x0001  T=20.5 H=59.7 S=38.1
-[I][gradient_mesh] Node 13 → 0x0001  T=20.4 H=60.4 S=38.4
-[I][gradient_mesh] Node 13 → 0x0001  T=20.4 H=59.1 S=38.7
+[I][gradient_mesh] Node 13 → 0x0001  T=20.4 H=59.2 S=39.3
+[I][gradient_mesh] Node 13 → 0x0001  T=20.3 H=59.9 S=39.6
+[I][gradient_mesh] Node 13 → 0x0001  T=20.3 H=58.6 S=39.9
