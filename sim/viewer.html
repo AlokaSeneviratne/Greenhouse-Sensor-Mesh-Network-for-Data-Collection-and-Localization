@@ -23,7 +23,7 @@
   .btn { font-size: 10px; padding: 2px 6px; border: 1px solid #444;
          background: #222; color: #bbb; border-radius: 3px; cursor: pointer; }
   .btn:hover { background: #333; }
-  #panel-title { font-size: 10px; color: #555; margin-bottom: 6px; text-transform: uppercase; }
+  #panel-title, .panel-title { font-size: 10px; color: #555; margin-bottom: 6px; text-transform: uppercase; }
 </style>
 </head>
 <body>
@@ -31,6 +31,7 @@
 <div id="header">
   <h1>PhytoSense — gradient mesh sim</h1>
   <span id="status">connecting…</span>
+  <span id="people-count" style="font-size:11px;color:#5fd0e0"></span>
 </div>
 
 <div id="main">
@@ -59,11 +60,12 @@
       <g id="links"></g>
       <g id="nodes"></g>
       <g id="anims"></g>
+      <g id="people"></g>
     </svg>
   </div>
 
   <div id="panel">
-    <div id="panel-title">Nodes</div>
+    <div class="panel-title">Nodes</div>
     <div id="node-list"></div>
   </div>
 </div>
@@ -100,6 +102,7 @@ const sy = y => CY - y * SCALE;
 // ---------------------------------------------------------------------------
 const nodeState = {};  // nid → {alive, t, h, s, hops, svgEl, panelEl}
 const linkMap   = {};  // "A-B" → svgEl
+const peopleEls = {};  // person id → dot circle
 let   ws        = null;
 
 // ---------------------------------------------------------------------------
@@ -248,6 +251,37 @@ const OP_COLOUR = {
 };
 
 // ---------------------------------------------------------------------------
+// People (the map's job): each visitor is a moving dot at their true position.
+// This is the sim's ground-truth view. The staff dashboard never sees these;
+// it gets only the per-node crowd density.
+// ---------------------------------------------------------------------------
+function updatePeople(msg) {
+  const peopleG = document.getElementById('people');
+  const seen = new Set();
+
+  for (const p of msg.people) {
+    seen.add(p.id);
+    let dot = peopleEls[p.id];
+    if (!dot) {
+      dot = svgEl('circle', { r: 4, fill: '#6C3BAA', stroke: '#0a2a30',
+                              'stroke-width': 1, opacity: 0.9 });
+      peopleG.appendChild(dot);
+      peopleEls[p.id] = dot;
+    }
+    dot.setAttribute('cx', sx(p.x));
+    dot.setAttribute('cy', sy(p.y));
+  }
+
+  // Remove anyone who left
+  for (const id in peopleEls) {
+    if (!seen.has(id)) { peopleEls[id].remove(); delete peopleEls[id]; }
+  }
+
+  const c = document.getElementById('people-count');
+  if (c) c.textContent = `${msg.people.length} people`;
+}
+
+// ---------------------------------------------------------------------------
 // WebSocket
 // ---------------------------------------------------------------------------
 function connect() {
@@ -277,6 +311,10 @@ function connect() {
         buildGraph(msg.links);
         buildPanel();
         for (const n of msg.nodes) setAlive(n.id, n.alive);
+        break;
+
+      case 'people':
+        updatePeople(msg);
         break;
 
       case 'node_update': {

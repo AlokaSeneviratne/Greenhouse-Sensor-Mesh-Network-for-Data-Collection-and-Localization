@@ -47,6 +47,7 @@
 <div id="header">
   <h1>PhytoSense — staff dashboard</h1>
   <span id="status">connecting…</span>
+  <span id="crowd" style="font-size:11px;color:#e8a06b;margin-left:12px"></span>
   <span id="summary"></span>
 </div>
 
@@ -55,6 +56,14 @@
   <span><span class="swatch" style="background:#7a4a00"></span>near limit</span>
   <span><span class="swatch" style="background:#7a1a1a"></span>out of range</span>
   <span><span class="swatch" style="background:#2a2a2a"></span>no data / offline</span>
+</div>
+
+<div id="heatmap-wrap" style="padding:10px 16px 0">
+  <div style="font-size:10px;color:#555;text-transform:uppercase;margin-bottom:5px">
+    Crowd heatmap <span style="color:#444;text-transform:none">· density per node, no individuals tracked</span>
+  </div>
+  <svg id="heatmap" viewBox="0 0 1100 280"
+       style="width:100%;max-height:300px;background:#0c0c0c;border:1px solid #1a1a1a;border-radius:6px"></svg>
 </div>
 
 <div id="houses">
@@ -215,6 +224,55 @@ function refreshSummary() {
 }
 
 // ---------------------------------------------------------------------------
+// Crowd heatmap (spatial node map, glow = bands acking that node)
+// ---------------------------------------------------------------------------
+const HCX = 550, HCY = 140, HSCALE = 34;
+const hsx = x => HCX + x * HSCALE;
+const hsy = y => HCY - y * HSCALE;
+const HNS = 'http://www.w3.org/2000/svg';
+function hEl(tag, attrs) {
+  const e = document.createElementNS(HNS, tag);
+  for (const [k, v] of Object.entries(attrs)) e.setAttribute(k, v);
+  return e;
+}
+const heatHalo = {};   // nid -> halo circle
+const heatDot  = {};   // nid -> node dot
+
+function buildHeatmap(nodes) {
+  const svg = document.getElementById('heatmap');
+  // greenhouse outlines
+  svg.appendChild(hEl('rect', { x: hsx(0.5), y: hsy(3.6), width: 13.5 * HSCALE,
+    height: 7.2 * HSCALE, rx: 6, fill: 'none', stroke: '#1a3a1a', 'stroke-dasharray': '5,4' }));
+  svg.appendChild(hEl('rect', { x: hsx(-10), y: hsy(3.6), width: 9 * HSCALE,
+    height: 7.2 * HSCALE, rx: 6, fill: 'none', stroke: '#1a1a3a', 'stroke-dasharray': '5,4' }));
+  const rt = hEl('text', { x: hsx(7), y: hsy(3.9), fill: '#2a5a2a', 'font-size': 11, 'text-anchor': 'middle' });
+  rt.textContent = 'Romeo'; svg.appendChild(rt);
+  const jt = hEl('text', { x: hsx(-5.5), y: hsy(3.9), fill: '#3a3a6a', 'font-size': 11, 'text-anchor': 'middle' });
+  jt.textContent = 'Julia'; svg.appendChild(jt);
+
+  // halos behind dots
+  for (const n of nodes) {
+    const halo = hEl('circle', { cx: hsx(n.x), cy: hsy(n.y), r: 0, fill: '#e8736b', opacity: 0 });
+    svg.appendChild(halo); heatHalo[n.id] = halo;
+  }
+  for (const n of nodes) {
+    const dot = hEl('circle', { cx: hsx(n.x), cy: hsy(n.y), r: n.id === 0 ? 6 : 4,
+      fill: n.id === 0 ? '#888' : '#3a6a3a', stroke: '#111', 'stroke-width': 1 });
+    svg.appendChild(dot); heatDot[n.id] = dot;
+  }
+}
+
+function updateHeat(counts) {
+  for (const nid in heatHalo) {
+    const c = counts[nid] || 0;
+    const h = heatHalo[nid];
+    if (c <= 0) { h.setAttribute('r', 0); h.setAttribute('opacity', 0); continue; }
+    h.setAttribute('r', Math.min(40, 10 + c * 6));
+    h.setAttribute('opacity', Math.min(0.6, 0.16 + c * 0.08));
+  }
+}
+
+// ---------------------------------------------------------------------------
 // WebSocket (same broker as viewer.html)
 // ---------------------------------------------------------------------------
 function connect() {
@@ -239,11 +297,18 @@ function connect() {
     switch (msg.type) {
       case 'topology':
         // (re)build only once
-        if (Object.keys(cards).length === 0) buildCards(msg.nodes);
+        if (Object.keys(cards).length === 0) { buildCards(msg.nodes); buildHeatmap(msg.nodes); }
         for (const n of msg.nodes) setAlive(n.id, n.alive);
         break;
       case 'node_update': updateCard(msg);            break;
       case 'alive':       setAlive(msg.id, msg.alive); break;
+      case 'occupancy': {
+        const el = document.getElementById('crowd');
+        if (el) el.textContent =
+          `· crowd: Romeo ${msg.romeo} · Julia ${msg.julia} · ${msg.total} total`;
+        updateHeat(msg.counts || {});
+        break;
+      }
       // 'packet' events are ignored here; this view is about values, not routing
     }
   };

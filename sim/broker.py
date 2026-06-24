@@ -44,8 +44,11 @@ import logging
 import math
 import random
 import struct
+import time
 
 import websockets
+
+import localization as loc   # hub-side visitor position estimator
 
 # ---------------------------------------------------------------------------
 # Logging
@@ -149,6 +152,32 @@ for _src in TOPOLOGY:
             _neighbours[_src].append((_dst, _rssi(d)))
 
 # ---------------------------------------------------------------------------
+# Visitor localization
+# ---------------------------------------------------------------------------
+# Anchor positions = every node, taken straight from the topology above. These
+# are the known fixed reference points a band uses to locate itself.
+NODE_COORDS = {nid: (x, y) for nid, (x, y, g, loc_) in TOPOLOGY.items()}
+
+# The architecture: nodes constantly beacon their ID and known position; a
+# visitor's band listens and locates itself, then acks its nearest node. Each
+# node counts those acks, and the counts ride the existing sensor mesh to the
+# hub to become a staff crowd heatmap. No position ever leaves the band, so the
+# hub sees density, not people, and it scales to any crowd. CROWD_SIZE is the dial.
+CROWD_SIZE   = 25
+CROWD_TAGS   = loc.crowd_tags(CROWD_SIZE)
+
+# Everyone walking the gardens. The map (viewer.html) draws these as moving dots
+# from their true positions; that view is the sim's god's-eye debug picture. The
+# staff dashboard never sees individuals, only the per-node crowd density.
+PEOPLE       = loc.default_tags() + CROWD_TAGS
+
+MOTION_DT_S  = 0.1     # advance people at 10 Hz (smooth motion on the map)
+CHIRP_DT_S   = 0.33    # a band acks its nearest node ~3 times/second
+
+OCCUPANCY_WINDOW_S    = 5.0   # a band counts toward a node if it acked within this
+OCCUPANCY_BROADCAST_S = 1.0   # push the heatmap to the dashboard at most this often
+
+# ---------------------------------------------------------------------------
 # Shared state
 # ---------------------------------------------------------------------------
 
@@ -161,6 +190,13 @@ class BrokerState:
         self.ws_clients: set = set()
         # Transport: set from asyncio loop
         self.transport = None
+        # Latest people positions broadcast (for new map clients joining mid-run)
+        self.people_last: dict = {}
+        # Latest ack per band: band_id -> (node_id, monotonic_time). Drives the
+        # crowd heatmap: a node's count is the bands whose latest ack went to it.
+        self.band_last_ack: dict[str, tuple] = {}
+        # Last occupancy snapshot sent (for new WS clients joining mid-run)
+        self.occupancy_last: dict = {}
 
     def node_alive(self, nid: int) -> bool:
         return nid not in self.dead_nodes
@@ -199,6 +235,64 @@ def _topology_msg() -> dict:
                 links.append({"from": src_nid, "to": dst_nid, "rssi": rssi})
 
     return {"type": "topology", "nodes": nodes, "links": links}
+
+
+# ---------------------------------------------------------------------------
+# Visitor localization loop
+# ---------------------------------------------------------------------------
+
+async def localization_loop():
+    """
+    Advance everyone walking the gardens. Each motion tick, broadcast their true
+    positions so the map can draw them as moving dots. A few times a second, each
+    band acks its nearest node; the per-node ack counts become the crowd heatmap
+    on the staff dashboard. No individual position is ever sent to the dashboard.
+    """
+    accum = 0.0
+    occ_accum = 0.0
+    LOG.info("Localization loop started (%d people)", len(PEOPLE))
+    while True:
+        await asyncio.sleep(MOTION_DT_S)
+        accum += MOTION_DT_S
+
+        for p in PEOPLE:
+            p.advance(MOTION_DT_S)
+
+        # Map view: stream true positions as moving dots (sim ground truth).
+        people_msg = {"type": "people",
+                      "people": [{"id": p.id, "x": round(p.x, 2), "y": round(p.y, 2)}
+                                 for p in PEOPLE]}
+        STATE.people_last = people_msg
+        await ws_broadcast(people_msg)
+
+        if accum < CHIRP_DT_S:
+            continue
+        occ_accum += accum
+        accum = 0.0
+
+        # ---- Crowd heatmap: every band acks its nearest node ----
+        now = time.monotonic()
+        for p in PEOPLE:
+            nn = loc.nearest_node((p.x, p.y), NODE_COORDS, dead=STATE.dead_nodes)
+            if nn is not None:
+                STATE.band_last_ack[p.id] = (nn, now)
+
+        if occ_accum >= OCCUPANCY_BROADCAST_S:
+            occ_accum = 0.0
+            counts = {}
+            for nid, t in STATE.band_last_ack.values():
+                if now - t <= OCCUPANCY_WINDOW_S:
+                    counts[nid] = counts.get(nid, 0) + 1
+            romeo = sum(c for nid, c in counts.items()
+                        if TOPOLOGY.get(nid, (0, 0, 0, '?'))[3] == 'R')
+            julia = sum(c for nid, c in counts.items()
+                        if TOPOLOGY.get(nid, (0, 0, 0, '?'))[3] == 'J')
+            occ = {"type": "occupancy",
+                   "counts": {str(k): v for k, v in counts.items()},
+                   "romeo": romeo, "julia": julia, "total": sum(counts.values())}
+            STATE.occupancy_last = occ
+            await ws_broadcast(occ)
+
 
 # ---------------------------------------------------------------------------
 # UDP protocol
@@ -320,6 +414,14 @@ async def ws_handler(websocket):
         for nid, r in STATE.readings.items():
             await websocket.send(json.dumps({"type": "node_update", **r}))
 
+        # Send last known people positions so a new map client sees them at once
+        if STATE.people_last:
+            await websocket.send(json.dumps(STATE.people_last))
+
+        # Send the latest crowd heatmap if we have one
+        if STATE.occupancy_last:
+            await websocket.send(json.dumps(STATE.occupancy_last))
+
         async for raw in websocket:
             try:
                 msg = json.loads(raw)
@@ -363,12 +465,21 @@ async def main():
     LOG.info("WebSocket server on ws://localhost:%d", WS_PORT)
     LOG.info("Open sim/viewer.html in a browser to see the live mesh")
 
+    # Visitor localization runs alongside the mesh
+    loc_task = asyncio.create_task(localization_loop())
+
     try:
         await asyncio.Future()   # run forever
     finally:
+        loc_task.cancel()
         udp_transport.close()
         ws_server.close()
 
 
 if __name__ == "__main__":
-    asyncio.run(main())
+    # On Windows the broker is normally torn down by run.ps1 (Stop-Process), but
+    # when run on its own a Ctrl-C should exit quietly rather than dump a trace.
+    try:
+        asyncio.run(main())
+    except KeyboardInterrupt:
+        LOG.info("Broker stopped")
