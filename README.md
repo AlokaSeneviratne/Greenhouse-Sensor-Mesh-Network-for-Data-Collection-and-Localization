@@ -113,9 +113,22 @@ study settled at roughly 1 m typical, which clears the zone-level need.
   person as a moving dot at their true position, over the node mesh and live
   routing traffic. This is ground truth, what the simulator knows, not what the
   hub knows.
+
+
+
+https://github.com/user-attachments/assets/d14fa5ad-de92-463f-9c25-7167441f0ddf
+
+
+
 - **The staff dashboard (`dashboard.html`)** is the realistic product view. It
   never sees individuals. It shows the sensor cards plus a crowd heatmap built
   only from per-node ack counts. Density, not people.
+
+
+
+https://github.com/user-attachments/assets/88f56a43-801d-40ac-b96d-1650faeccbc7
+
+
 
 That split is the privacy model made visible: the map (the sim) can see
 everyone, the dashboard (the real deployment) sees only how busy each node is.
